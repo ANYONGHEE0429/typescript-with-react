@@ -1,100 +1,113 @@
-import React, { useEffect, useId, useState } from 'react';
-import { auth, signInWithGoogle } from './auth';
-import { User } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import { getDatabase, ref, push, onValue, remove, update } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
+import { getAuth, signOut } from 'firebase/auth';
 
-interface todoList {
-   id: Number;
+interface TodoType {
+   id: number;
    text: string;
 }
 
-function Lists() {
-   const [inputTodo, setInputTodo] = useState(''); //입력 값
-   const [todos, setTodos] = useState<todoList[]>([]); //Todo의 리스트 값
-   const [nextId, setNextId] = useState(0); //다음 id 값
+const Lists = () => {
+   const [inputTodo, setInputTodo] = useState('');
+   const [todos, setTodos] = useState<TodoType[]>([]);
+   const [nextId, setNextId] = useState(0);
+   const navigate = useNavigate();
+   const auth = getAuth(); // Firebase 인증 객체 가져오기
+   const userId = auth.currentUser?.uid; // 사용자의 고유 식별자
 
-   const id = useId();
+   useEffect(() => {
+      if (!userId) return;
+      const dbRef = ref(getDatabase(), `todos/${userId}`);
+      onValue(dbRef, snapshot => {
+         const data = snapshot.val();
+         if (data) {
+            setTodos(Object.values(data));
+            setNextId(Object.keys(data).length);
+         } else {
+            setTodos([]);
+            setNextId(0);
+         }
+      });
+   }, [userId]);
 
-   //입력 값
-   const inputChanged = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInputTodo(e.target.value);
-   };
-
-   //입력 된 내용 추가
-   const addTodo = () => {
+   const handleAddTodo = () => {
       if (inputTodo !== '') {
-         const newTodo: todoList = {
+         const newTodo = {
             id: nextId,
             text: inputTodo,
          };
-         setTodos([...todos, newTodo]); //newTodo 값 추가
-         setNextId(nextId + 1); // 다음 id 값 업데이트
-         setInputTodo(''); // 입력창 초기화
+         const todosRef = ref(getDatabase(), `todos/${userId}`);
+         push(todosRef, newTodo);
+         setNextId(prevId => prevId + 1);
+         setInputTodo('');
       } else {
-         alert('Please fill the content');
+         alert('Please enter your to do');
       }
    };
 
-   //입력된 값 삭제
-   const removeChange = (id: number) => {
-      const removed = todos.filter(todo => id !== todo.id);
-      setTodos(removed); //입력 값
+   const handleDeleteTodo = (id: number) => {
+      const todosRef = ref(getDatabase(), `todos/${userId}`);
+      remove(todosRef)
+         .then(() => {
+            const deleteTodo = todos.filter(todo => todo.id !== id);
+            setTodos(deleteTodo);
+            alert('Delete completed successfully');
+         })
+         .catch(error => console.error('An error occurred while deleting', error));
    };
 
-   //내용 업데이트
-   const updateChange = (id: number) => {
-      const updatedName = prompt('Content to Change');
+   const handleUpdateTodo = (id: number) => {
+      const updatedName = prompt('Enter new text');
       if (updatedName !== null && updatedName !== '') {
-         setTodos(todos.map(item => (item.id === id ? { ...item, text: updatedName } : item)));
+         const todoRef = ref(getDatabase(), `todos/${userId}`);
+         update(todoRef, { text: updatedName })
+            .then(() => {
+               const updatedTodos = todos.map(todo => {
+                  if (todo.id === id) {
+                     return { ...todo, text: updatedName };
+                  }
+                  return todo;
+               });
+               setTodos(updatedTodos);
+               alert('Update completed successfully');
+            })
+            .catch(error => console.error('An error occurred while updating', error));
       } else {
          alert("There's no content. Please fill the content for update");
       }
    };
 
-   const [user, setUser] = useState<User | null>(null);
-
-   const navigate = useNavigate();
-
-   useEffect(() => {
-      const unsubscribe = auth.onAuthStateChanged(user => {
-         setUser(user);
-         if (!user) {
-            toLoginForm();
-         }
-      });
-
-      return () => unsubscribe();
-   }, [user]);
-
-   const toLoginForm = () => {
-      navigate('/');
+   const handleLogout = () => {
+      const auth = getAuth();
+      signOut(auth)
+         .then(() => {
+            navigate('/');
+         })
+         .catch(error => console.error('An error occurred while logging out', error));
    };
+
+   const today = new Date();
+   const year = today.getFullYear();
+   const month = today.getMonth() + 1;
+   const day = today.getDay();
    return (
       <div>
-         <p>Todo</p>
-         <input value={inputTodo} onChange={inputChanged} />
-         <button onClick={addTodo}>Add</button>
+         <p>{`${year}/${month}/${day}`}</p>
+         <input value={inputTodo} onChange={e => setInputTodo(e.target.value)} />
+         <button onClick={handleAddTodo}>Add</button>
+         <button onClick={handleLogout}>Sing out</button>
          <ul>
-            {todos.map(item => (
-               <li key={item.id.toString()}>
-                  {item.text}
-                  <button onClick={() => updateChange(Number(item.id))}>update</button>
-                  <button onClick={() => removeChange(Number(item.id))}>delete</button>
+            {todos.map(todo => (
+               <li key={todo.id}>
+                  {todo.text}
+                  <button onClick={() => handleDeleteTodo(todo.id)}>Delete</button>
+                  <button onClick={() => handleUpdateTodo(todo.id)}>Update</button>
                </li>
             ))}
          </ul>
-
-         <div>
-            {user ? (
-               <div>
-                  <button onClick={() => auth.signOut()}>Sign Out</button>
-               </div>
-            ) : (
-               <div></div>
-            )}
-         </div>
       </div>
    );
-}
+};
 
 export default Lists;

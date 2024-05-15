@@ -14,6 +14,8 @@ const Login = () => {
             goToTodo();
          }
       });
+
+      return () => unsubscribe();
    }, [user]);
 
    const goToTodo = () => {
