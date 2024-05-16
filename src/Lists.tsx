@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getDatabase, ref, push, onValue, remove, update } from 'firebase/database';
+import { getDatabase, ref, push, onValue, remove, update, set } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, signOut } from 'firebase/auth';
 
@@ -18,7 +18,7 @@ const Lists = () => {
 
    useEffect(() => {
       if (!userId) return;
-      const dbRef = ref(getDatabase(), `todos/${userId}`);
+      const dbRef = ref(getDatabase(), `users/${userId}/todo`);
       onValue(dbRef, snapshot => {
          const data = snapshot.val();
          if (data) {
@@ -37,22 +37,24 @@ const Lists = () => {
             id: nextId,
             text: inputTodo,
          };
-         const todosRef = ref(getDatabase(), `todos/${userId}`);
-         push(todosRef, newTodo);
-         setNextId(prevId => prevId + 1);
-         setInputTodo('');
+         const id = nextId;
+         set(ref(getDatabase(), `users/${userId}/todo/${id}`), newTodo)
+            .then(() => {
+               setNextId(prevId => prevId + 1);
+               setInputTodo('');
+            })
+            .catch(error => console.error('An error occurred while adding', error));
       } else {
-         alert('Please enter your to do');
       }
    };
 
    const handleDeleteTodo = (id: number) => {
-      const todosRef = ref(getDatabase(), `todos/${userId}`);
+      const todosRef = ref(getDatabase(), `users/${userId}/todo/${id}`);
       remove(todosRef)
          .then(() => {
             const deleteTodo = todos.filter(todo => todo.id !== id);
             setTodos(deleteTodo);
-            alert('Delete completed successfully');
+            // alert('Delete completed successfully');
          })
          .catch(error => console.error('An error occurred while deleting', error));
    };
@@ -60,7 +62,7 @@ const Lists = () => {
    const handleUpdateTodo = (id: number) => {
       const updatedName = prompt('Enter new text');
       if (updatedName !== null && updatedName !== '') {
-         const todoRef = ref(getDatabase(), `todos/${userId}`);
+         const todoRef = ref(getDatabase(), `users/${userId}/todo/${id}`);
          update(todoRef, { text: updatedName })
             .then(() => {
                const updatedTodos = todos.map(todo => {
@@ -70,7 +72,7 @@ const Lists = () => {
                   return todo;
                });
                setTodos(updatedTodos);
-               alert('Update completed successfully');
+               //  alert('Update completed successfully');
             })
             .catch(error => console.error('An error occurred while updating', error));
       } else {
@@ -96,7 +98,7 @@ const Lists = () => {
          <p>{`${year}/${month}/${day}`}</p>
          <input value={inputTodo} onChange={e => setInputTodo(e.target.value)} />
          <button onClick={handleAddTodo}>Add</button>
-         <button onClick={handleLogout}>Sing out</button>
+         <button onClick={handleLogout}>Sign out</button>
          <ul>
             {todos.map(todo => (
                <li key={todo.id}>
